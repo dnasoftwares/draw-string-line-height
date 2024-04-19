@@ -55,7 +55,7 @@ namespace NarcityMedia.DrawStringLineHeight
                     //If the word is a line break, add the current line to the list and start a new line.
                     if (Regex.IsMatch(words[i], @"^\r?\n$"))
                     {
-                        lines.Add(currentLine == "" ? "\uE007F" : currentLine);
+                        lines.Add(currentLine + "\uE007F");//Place a marker for an line break
                         currentLine = "";
                         currentWidth = 0;
                         continue;
@@ -149,7 +149,6 @@ namespace NarcityMedia.DrawStringLineHeight
                             currentLine = words[i];
                             //If the currentWordWidth is already longer than maxWidth, the characters in the current line should be split
                             //and the remainder should be carried over to the next line.
-                            //そもそも詰めようがないので、そのまま次の行に移動する。
                             if (currentLine.Length <= 1)
                             {
                                 lines.Add(currentLine);
@@ -192,6 +191,49 @@ namespace NarcityMedia.DrawStringLineHeight
                         lines.Add(currentLine);
                     }
                 }
+            }
+            //There is a margin of error between the width of a character and the width of a cohesive string of characters
+            //due to factors such as kerning and ligatures.
+            //This process involves determining the width of the text when it is all placed on a single line,
+            //and then moving the last character of any line that exceeds this width to the beginning of the next line.
+            for (int l = 0; l < lines.Count; l++)
+            {
+                //Ignore blank lines, and leave the lines that are not overflowing as they are.
+                if (string.IsNullOrWhiteSpace(lines[l]) || !(that.MeasureString(lines[l].TrimEnd(), font).Width > maxWidth)) continue;
+                var pos = lines[l].Length - 1;
+                if (pos == 0) continue; //If it's already sticking out in just one character, there's nothing to be done, so skip it.
+                while (that.MeasureString(lines[l].Substring(0, pos), font).Width > maxWidth && pos > 1)
+                {
+                    pos--;
+                }
+                if (string.IsNullOrWhiteSpace(lines[l].Substring(pos))) continue; //If the section to be cut out contains only blank spaces, do not process it.
+                //Add to the beginning of the next line of text
+                if (l + 1 < lines.Count)
+                {
+                    // Insert at the beginning of the next line
+                    // However, if the end of the extracted part is a forced line break mark, add a new line.
+                    if (lines[l].Substring(pos).EndsWith("\uE007F"))
+                    {
+                        lines.Insert(l + 1, lines[l].Substring(pos));
+                    }
+                    else
+                    {
+                        lines[l + 1] = lines[l].Substring(pos) + lines[l + 1];
+                    }
+
+                }
+                else
+                {
+                    lines.Add(lines[l].Substring(pos));
+                }
+                //Remove from the end of the current line.
+                lines[l] = lines[l].Substring(0, pos);
+            }
+
+            //Remove the forced line break mark (\uE007F) in the middle of the sentence.
+            for (int l = 0; l < lines.Count; l++)
+            {
+                lines[l] = (lines[l] == "\uE007F") ? lines[l] : lines[l].Replace("\uE007F", "");
             }
 
             return lines;
